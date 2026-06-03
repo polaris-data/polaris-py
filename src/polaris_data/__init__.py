@@ -9,13 +9,16 @@ from .errors import (
     StreamDecodeError,
     UnauthorizedError,
 )
+from .models import LocalSnapshotEntry, SnapshotEntry
 
 __all__ = [
     "NotFoundError",
     "DownloadNotAllowedError",
+    "LocalSnapshotEntry",
     "PolarisClient",
     "PolarisError",
     "RateLimitedError",
+    "SnapshotEntry",
     "StreamDecodeError",
     "UnauthorizedError",
 ]
