@@ -29,7 +29,6 @@ from .layout import (
 from .models import (
     JSONDict,
     LocalSnapshotEntry,
-    OhlcvParquetResponse,
     SnapshotEntry,
 )
 from .utils import TimeInput, chunk_timerange, to_datetime, to_iso8601
@@ -1431,7 +1430,7 @@ class PolarisClient:
         to: TimeInput,
         interval: str,
         format: str | None = None,
-    ) -> list[JSONDict] | JSONDict | OhlcvParquetResponse:
+    ) -> list[JSONDict] | JSONDict:
         if _interval_to_us(interval) is None:
             raise ValueError(
                 "interval must be one of: " + ", ".join(_INTERVAL_US)
@@ -1446,22 +1445,14 @@ class PolarisClient:
                 interval=interval,
             )
 
-        if format not in {"tradingview", "parquet"}:
-            raise ValueError("format must be one of: None, 'tradingview', 'parquet'")
+        if format != "tradingview":
+            raise ValueError("format must be one of: None, 'tradingview'")
 
-        if format == "tradingview":
-            bars = self._aggregate_ohlcv_from_standard_trades(
-                exchange=exchange,
-                asset=asset,
-                from_=from_,
-                to=to,
-                interval=interval,
-            )
-            return _to_tradingview_ohlcv(bars)
-
-        params = self._range_params(exchange, asset, from_, to)
-        params["interval"] = interval
-        params["format"] = format
-
-        payload = self._get_json("ohlcv", params=params, auth_required=True)
-        return payload
+        bars = self._aggregate_ohlcv_from_standard_trades(
+            exchange=exchange,
+            asset=asset,
+            from_=from_,
+            to=to,
+            interval=interval,
+        )
+        return _to_tradingview_ohlcv(bars)

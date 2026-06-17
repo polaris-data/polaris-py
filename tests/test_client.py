@@ -329,6 +329,22 @@ def test_ohlcv_tradingview_format_returns_local_json(tmp_path) -> None:
         client.close()
 
 
+def test_ohlcv_rejects_stale_parquet_format() -> None:
+    client = make_client(lambda request: httpx.Response(500))
+    try:
+        with pytest.raises(ValueError, match="format must be one of: None, 'tradingview'"):
+            client.ohlcv(
+                exchange="binance",
+                asset="BTC-USDT",
+                from_="2024-01-01T00:00:00Z",
+                to="2024-01-01T00:01:00Z",
+                interval="1m",
+                format="parquet",
+            )
+    finally:
+        client.close()
+
+
 def test_list_snapshots_paginates_across_data_and_snapshots_fields() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/snapshots"

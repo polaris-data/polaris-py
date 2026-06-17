@@ -70,7 +70,7 @@ Authenticated endpoints:
 - `trades(exchange=..., asset=..., from_=..., to=..., limit=1000)` (snapshot-first list of standardized trade events)
 - `events(exchange=..., asset=..., from_=..., to=..., limit=1000)` (snapshot-first list for standardized events)
 - `raw(exchange=..., asset=..., from_=..., to=..., limit=1000)` (prefers `format=file`, falls back to paginated JSON)
-- `ohlcv(exchange=..., asset=..., from_=..., to=..., interval=..., format=None)` (snapshot-first local OHLCV aggregation; `format="parquet"` stays server-side)
+- `ohlcv(exchange=..., asset=..., from_=..., to=..., interval=..., format=None)` (snapshot-first local OHLCV aggregation; optional `format="tradingview"`)
 
 For event/data endpoints, `standard=True` is the default. Pass `standard=False` when you explicitly need raw schema payloads.
 
