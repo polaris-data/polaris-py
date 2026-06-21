@@ -32,8 +32,8 @@ with PolarisClient(api_key="polaris_key_your_key") as client:
     row_count = sum(
         1
         for _ in client.replay(
-            exchange="binance",
-            asset="BTC-USDT",
+            venue="binance",
+            symbol="BTC-USDT",
             from_="2024-01-01T00:00:00Z",
             to="2024-01-01T01:00:00Z",
         )
@@ -61,16 +61,16 @@ Use it to inspect available data and query historical market data.
 ### Discovery
 
 - `health()`: Check API availability.
-- `catalog(exchange=None, asset=None)`: Browse supported exchanges and assets.
-- `list_snapshots(exchange=..., asset=..., from_=..., to=..., limit=1000)`: List available snapshot files for a time range.
+- `catalog(venue=None, symbol=None)`: Browse supported venues and symbols.
+- `list_snapshots(venue=..., symbol=..., from_=..., to=..., limit=1000)`: List available snapshot files for a time range.
 
 ### Historical data
 
-- `replay(exchange=..., asset=..., from_=..., to=..., standard=True, parallel=False)`: Stream historical events for backfills, notebooks, or replay-style processing.
-- `events(exchange=..., asset=..., from_=..., to=..., limit=1000)`: Return standardized historical events as a list.
-- `trades(exchange=..., asset=..., from_=..., to=..., limit=1000)`: Return standardized trade events as a list.
-- `raw(exchange=..., asset=..., from_=..., to=..., limit=1000)`: Return raw exchange payloads as a list.
-- `ohlcv(exchange=..., asset=..., from_=..., to=..., interval=..., format=None)`: Aggregate OHLCV bars from standardized trade data.
+- `replay(venue=..., symbol=..., from_=..., to=..., standard=True, parallel=False)`: Stream historical events for backfills, notebooks, or replay-style processing.
+- `events(venue=..., symbol=..., from_=..., to=..., limit=1000)`: Return standardized historical events as a list.
+- `trades(venue=..., symbol=..., from_=..., to=..., limit=1000)`: Return standardized trade events as a list.
+- `raw(venue=..., symbol=..., from_=..., to=..., limit=1000)`: Return raw venue payloads as a list.
+- `ohlcv(venue=..., symbol=..., from_=..., to=..., interval=..., format=None)`: Aggregate OHLCV bars from standardized trade data.
 
 For historical event queries, `standard=True` is the default. Pass `standard=False` when you explicitly want raw schema payloads through `replay(...)`. Methods that take `from_` and `to` accept ISO 8601 strings, `datetime`, `date`, or Unix epoch microseconds.
 
@@ -84,8 +84,8 @@ with PolarisClient(api_key="polaris_key_your_key") as client:
     print(catalog)
 
     rows = client.events(
-        exchange="binance",
-        asset="BTC-USDT",
+        venue="binance",
+        symbol="BTC-USDT",
         from_="2024-01-01T00:00:00Z",
         to="2024-01-01T01:00:00Z",
     )
@@ -96,12 +96,14 @@ Example response shape:
 
 ```python
 {
-    "exchanges": [
-        {"id": "binance", "assets": ["BTC-USDT"]},
-        {"id": "hyperliquid", "assets": ["BTC", "ETH"]},
+    "venues": [
+        {"id": "binance", "symbols": ["BTC-USDT"]},
+        {"id": "hyperliquid", "symbols": ["BTC", "ETH"]},
     ]
 }
 ```
+
+Legacy `exchange=` / `asset=` keyword arguments are still accepted for compatibility, but `venue=` / `symbol=` is the preferred SDK surface.
 
 ## Local dataset storage
 
@@ -137,8 +139,8 @@ from polaris_data import PolarisClient
 
 with PolarisClient(api_key="polaris_key_your_key") as client:
     for row in client.replay(
-        exchange="binance",
-        asset="BTC-USDT",
+        venue="binance",
+        symbol="BTC-USDT",
         from_="2024-01-01T00:00:00Z",
         to="2024-01-01T01:00:00Z",
     ):
@@ -156,8 +158,8 @@ client = PolarisClient()
 
 try:
     client.replay(
-        exchange="binance",
-        asset="BTC-USDT",
+        venue="binance",
+        symbol="BTC-USDT",
         from_="2024-01-01T00:00:00Z",
         to="2024-01-01T01:00:00Z",
     )
