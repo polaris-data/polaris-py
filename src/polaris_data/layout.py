@@ -22,8 +22,8 @@ LEGACY_ROOT_ENV_VAR = "POLARIS_DATASET_DOWNLOAD_DIR"
 @dataclass(frozen=True)
 class LocalDailyArtifactEntry:
     path: str
-    venue: str
-    symbol: str
+    source: str
+    market: str
     date: str
 
 
@@ -165,20 +165,20 @@ class LocalDatasetLayout:
 
     def daily_path_for_dataset_day(
         self,
-        venue: str,
-        symbol: str,
+        source: str,
+        market: str,
         day: date,
     ) -> Path:
-        return self.daily_root / venue / symbol / f"{day.isoformat()}.jsonl.zst"
+        return self.daily_root / source / market / f"{day.isoformat()}.jsonl.zst"
 
     def daily_temp_path_for_dataset_day(
         self,
-        venue: str,
-        symbol: str,
+        source: str,
+        market: str,
         day: date,
     ) -> Path:
         digest = hashlib.sha256(
-            f"{venue}:{symbol}:{day.isoformat()}".encode("utf-8")
+            f"{source}:{market}:{day.isoformat()}".encode("utf-8")
         ).hexdigest()
         return self.tmp_root / f"daily-{digest}.part"
 
@@ -193,15 +193,15 @@ class LocalDatasetLayout:
 
             relative = path.relative_to(self.data_root).as_posix()
             filename = path.name
-            venue, symbol, day = infer_snapshot_identity(relative, filename)
+            source, market, day = infer_snapshot_identity(relative, filename)
             start, end = parse_snapshot_times(filename)
             files.append(
                 LocalSnapshotEntry(
                     key=relative,
                     path=str(path),
                     filename=filename,
-                    venue=venue,
-                    symbol=symbol,
+                    source=source,
+                    market=market,
                     date=day.isoformat() if day is not None else None,
                     start=start,
                     end=end,
@@ -224,20 +224,20 @@ class LocalDatasetLayout:
             if len(relative) != 3:
                 continue
 
-            venue, symbol, filename = relative
+            source, market, filename = relative
             if not filename.endswith(".jsonl.zst"):
                 continue
 
             files.append(
                 LocalDailyArtifactEntry(
                     path=str(path),
-                    venue=venue,
-                    symbol=symbol,
+                    source=source,
+                    market=market,
                     date=filename.removesuffix(".jsonl.zst"),
                 )
             )
 
-        files.sort(key=lambda item: (item.venue, item.symbol, item.date))
+        files.sort(key=lambda item: (item.source, item.market, item.date))
         return files
 
     def materialize_daily_artifact(
@@ -246,15 +246,15 @@ class LocalDatasetLayout:
         *,
         force: bool = False,
     ) -> Path | None:
-        if snapshot.venue is None or snapshot.symbol is None or snapshot.date is None:
+        if snapshot.source is None or snapshot.market is None or snapshot.date is None:
             return None
 
         day = date.fromisoformat(snapshot.date)
         source = Path(snapshot.path)
-        target = self.daily_path_for_dataset_day(snapshot.venue, snapshot.symbol, day)
+        target = self.daily_path_for_dataset_day(snapshot.source, snapshot.market, day)
         temp_target = self.daily_temp_path_for_dataset_day(
-            snapshot.venue,
-            snapshot.symbol,
+            snapshot.source,
+            snapshot.market,
             day,
         )
 
@@ -328,19 +328,19 @@ def infer_snapshot_identity(
     indexed = infer_date_segment_index(segments)
     if indexed is not None:
         index, day = indexed
-        venue = segments[index - 2] if index >= 2 else None
-        symbol = segments[index - 1] if index >= 1 else None
-        return venue, symbol, day
+        source = segments[index - 2] if index >= 2 else None
+        market = segments[index - 1] if index >= 1 else None
+        return source, market, day
 
     day = infer_date_from_text(filename)
     if day is not None:
-        venue = segments[-3] if len(segments) >= 3 else None
-        symbol = segments[-2] if len(segments) >= 2 else None
-        return venue, symbol, day
+        source = segments[-3] if len(segments) >= 3 else None
+        market = segments[-2] if len(segments) >= 2 else None
+        return source, market, day
 
-    venue = segments[-4] if len(segments) >= 4 else None
-    symbol = segments[-3] if len(segments) >= 3 else None
-    return venue, symbol, None
+    source = segments[-4] if len(segments) >= 4 else None
+    market = segments[-3] if len(segments) >= 3 else None
+    return source, market, None
 
 
 def infer_date_from_segments(segments: Iterable[str]) -> date | None:
