@@ -103,8 +103,6 @@ Example response shape:
 }
 ```
 
-Legacy `exchange=` / `asset=` keyword arguments are still accepted for compatibility, but `venue=` / `symbol=` is the preferred SDK surface.
-
 ## Local dataset storage
 
 Standardized snapshots and local day files are stored under the shared Polaris app-data root so the Python SDK and CLI can reuse the same files.

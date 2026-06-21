@@ -26,16 +26,6 @@ class LocalDailyArtifactEntry:
     symbol: str
     date: str
 
-    @property
-    def exchange(self) -> str:
-        """Compatibility alias for earlier SDK releases."""
-        return self.venue
-
-    @property
-    def asset(self) -> str:
-        """Compatibility alias for earlier SDK releases."""
-        return self.symbol
-
 
 def resolve_dataset_root(
     *,
@@ -175,34 +165,20 @@ class LocalDatasetLayout:
 
     def daily_path_for_dataset_day(
         self,
-        venue: str | None = None,
-        symbol: str | None = None,
-        day: date | None = None,
-        *,
-        exchange: str | None = None,
-        asset: str | None = None,
+        venue: str,
+        symbol: str,
+        day: date,
     ) -> Path:
-        resolved_venue = venue if venue is not None else exchange
-        resolved_symbol = symbol if symbol is not None else asset
-        if resolved_venue is None or resolved_symbol is None or day is None:
-            raise TypeError("venue, symbol, and day are required")
-        return self.daily_root / resolved_venue / resolved_symbol / f"{day.isoformat()}.jsonl.zst"
+        return self.daily_root / venue / symbol / f"{day.isoformat()}.jsonl.zst"
 
     def daily_temp_path_for_dataset_day(
         self,
-        venue: str | None = None,
-        symbol: str | None = None,
-        day: date | None = None,
-        *,
-        exchange: str | None = None,
-        asset: str | None = None,
+        venue: str,
+        symbol: str,
+        day: date,
     ) -> Path:
-        resolved_venue = venue if venue is not None else exchange
-        resolved_symbol = symbol if symbol is not None else asset
-        if resolved_venue is None or resolved_symbol is None or day is None:
-            raise TypeError("venue, symbol, and day are required")
         digest = hashlib.sha256(
-            f"{resolved_venue}:{resolved_symbol}:{day.isoformat()}".encode("utf-8")
+            f"{venue}:{symbol}:{day.isoformat()}".encode("utf-8")
         ).hexdigest()
         return self.tmp_root / f"daily-{digest}.part"
 

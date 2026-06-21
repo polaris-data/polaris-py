@@ -41,13 +41,3 @@ class LocalSnapshotEntry:
     date: str | None
     start: datetime | None
     end: datetime | None
-
-    @property
-    def exchange(self) -> str | None:
-        """Compatibility alias for earlier SDK releases."""
-        return self.venue
-
-    @property
-    def asset(self) -> str | None:
-        """Compatibility alias for earlier SDK releases."""
-        return self.symbol

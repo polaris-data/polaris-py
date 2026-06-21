@@ -43,20 +43,10 @@ def make_client(
 
 def test_catalog_returns_payload() -> None:
     payload = {
-        "exchanges": [
-            {"id": "binance", "assets": ["BTC-USDT"]},
-            {"id": "hyperliquid", "assets": ["BTC", "ETH"]},
-        ]
-    }
-    expected = {
-        "exchanges": [
-            {"id": "binance", "assets": ["BTC-USDT"]},
-            {"id": "hyperliquid", "assets": ["BTC", "ETH"]},
-        ],
         "venues": [
-            {"id": "binance", "assets": ["BTC-USDT"], "symbols": ["BTC-USDT"]},
-            {"id": "hyperliquid", "assets": ["BTC", "ETH"], "symbols": ["BTC", "ETH"]},
-        ],
+            {"id": "binance", "symbols": ["BTC-USDT"]},
+            {"id": "hyperliquid", "symbols": ["BTC", "ETH"]},
+        ]
     }
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -66,23 +56,7 @@ def test_catalog_returns_payload() -> None:
 
     client = make_client(handler)
     try:
-        assert client.catalog() == expected
-    finally:
-        client.close()
-
-
-def test_catalog_accepts_legacy_exchange_asset_aliases() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/catalog"
-        assert request.url.params.get("venue") == "binance"
-        assert request.url.params.get("symbol") == "BTC-USDT"
-        assert request.url.params.get("exchange") is None
-        assert request.url.params.get("asset") is None
-        return httpx.Response(200, json={"exchanges": []})
-
-    client = make_client(handler)
-    try:
-        client.catalog(exchange="binance", asset="BTC-USDT")
+        assert client.catalog() == payload
     finally:
         client.close()
 
@@ -202,8 +176,6 @@ def test_trades_fall_back_to_events_when_snapshot_coverage_is_incomplete() -> No
             assert request.url.params.get("format") == "file"
             assert request.url.params.get("venue") == "binance"
             assert request.url.params.get("symbol") == "BTC-USDT"
-            assert request.url.params.get("exchange") is None
-            assert request.url.params.get("asset") is None
             return httpx.Response(
                 200,
                 content=_zstd_ndjson(
@@ -380,8 +352,6 @@ def test_list_snapshots_paginates_across_data_and_snapshots_fields() -> None:
         assert request.url.path == "/snapshots"
         assert request.url.params.get("venue") == "binance"
         assert request.url.params.get("symbol") == "BTC-USDT"
-        assert request.url.params.get("exchange") is None
-        assert request.url.params.get("asset") is None
         cursor = request.url.params.get("cursor")
         if cursor is None:
             return httpx.Response(
@@ -733,8 +703,6 @@ def test_raw_uses_file_export_by_default() -> None:
         assert request.url.params.get("format") == "file"
         assert request.url.params.get("venue") == "binance"
         assert request.url.params.get("symbol") == "BTC-USDT"
-        assert request.url.params.get("exchange") is None
-        assert request.url.params.get("asset") is None
         return httpx.Response(
             200,
             content=_zstd_ndjson([{"exchange_payload": {"id": 42}}]),

@@ -485,82 +485,6 @@ class PolarisClient:
                 response.iter_bytes(chunk_size=chunk_size)
             )
 
-    def _resolve_selector_alias(
-        self,
-        *,
-        primary_name: str,
-        primary_value: str | None,
-        legacy_name: str,
-        legacy_value: str | None,
-        required: bool = False,
-    ) -> str | None:
-        if (
-            primary_value is not None
-            and legacy_value is not None
-            and primary_value != legacy_value
-        ):
-            raise ValueError(
-                f"{primary_name} and {legacy_name} must match when both are provided"
-            )
-
-        resolved = primary_value if primary_value is not None else legacy_value
-        if required and resolved is None:
-            raise TypeError(f"{primary_name} is required")
-        return resolved
-
-    def _resolve_dataset_identifiers(
-        self,
-        *,
-        venue: str | None = None,
-        symbol: str | None = None,
-        exchange: str | None = None,
-        asset: str | None = None,
-        require_venue: bool = True,
-        require_symbol: bool = True,
-    ) -> tuple[str | None, str | None]:
-        resolved_venue = self._resolve_selector_alias(
-            primary_name="venue",
-            primary_value=venue,
-            legacy_name="exchange",
-            legacy_value=exchange,
-            required=require_venue,
-        )
-        resolved_symbol = self._resolve_selector_alias(
-            primary_name="symbol",
-            primary_value=symbol,
-            legacy_name="asset",
-            legacy_value=asset,
-            required=require_symbol,
-        )
-        return resolved_venue, resolved_symbol
-
-    def _with_catalog_aliases(self, payload: JSONDict) -> JSONDict:
-        exchanges = payload.get("exchanges")
-        if "venues" in payload or not isinstance(exchanges, list):
-            return payload
-
-        aliased_payload = dict(payload)
-        venues: list[object] = []
-        for exchange_entry in exchanges:
-            if not isinstance(exchange_entry, dict):
-                venues.append(exchange_entry)
-                continue
-
-            venue_entry = dict(exchange_entry)
-            assets = exchange_entry.get("assets")
-            if "symbols" not in venue_entry and isinstance(assets, list):
-                symbols: list[object] = []
-                for asset_entry in assets:
-                    if isinstance(asset_entry, dict):
-                        symbols.append(dict(asset_entry))
-                    else:
-                        symbols.append(asset_entry)
-                venue_entry["symbols"] = symbols
-            venues.append(venue_entry)
-
-        aliased_payload["venues"] = venues
-        return aliased_payload
-
     def _iter_dataset_data(
         self,
         *,
@@ -996,37 +920,23 @@ class PolarisClient:
         *,
         venue: str | None = None,
         symbol: str | None = None,
-        exchange: str | None = None,
-        asset: str | None = None,
     ) -> JSONDict:
-        venue, symbol = self._resolve_dataset_identifiers(
-            venue=venue,
-            symbol=symbol,
-            exchange=exchange,
-            asset=asset,
-            require_venue=False,
-            require_symbol=False,
-        )
         params: dict[str, str] = {}
         if venue is not None:
             params["venue"] = venue
         if symbol is not None:
             params["symbol"] = symbol
-        return self._with_catalog_aliases(
-            self._get_json(
+        return self._get_json(
             "catalog",
             params=params or None,
             include_auth_if_available=True,
-        )
         )
 
     def list_snapshots(
         self,
         *,
-        venue: str | None = None,
-        symbol: str | None = None,
-        exchange: str | None = None,
-        asset: str | None = None,
+        venue: str,
+        symbol: str,
         from_: TimeInput,
         to: TimeInput,
         limit: int = 1000,
@@ -1034,12 +944,6 @@ class PolarisClient:
         if limit <= 0:
             raise ValueError("limit must be > 0")
 
-        venue, symbol = self._resolve_dataset_identifiers(
-            venue=venue,
-            symbol=symbol,
-            exchange=exchange,
-            asset=asset,
-        )
         params = self._range_params(venue, symbol, from_, to)
         params["limit"] = str(limit)
 
@@ -1078,20 +982,12 @@ class PolarisClient:
     def _download_snapshots(
         self,
         *,
-        venue: str | None = None,
-        symbol: str | None = None,
-        exchange: str | None = None,
-        asset: str | None = None,
+        venue: str,
+        symbol: str,
         from_: TimeInput,
         to: TimeInput,
         force: bool = False,
     ) -> list[LocalSnapshotEntry]:
-        venue, symbol = self._resolve_dataset_identifiers(
-            venue=venue,
-            symbol=symbol,
-            exchange=exchange,
-            asset=asset,
-        )
         snapshots = self.list_snapshots(
             venue=venue,
             symbol=symbol,
@@ -1105,18 +1001,8 @@ class PolarisClient:
         *,
         venue: str | None = None,
         symbol: str | None = None,
-        exchange: str | None = None,
-        asset: str | None = None,
         date: str | date | None = None,
     ) -> list[LocalSnapshotEntry]:
-        venue, symbol = self._resolve_dataset_identifiers(
-            venue=venue,
-            symbol=symbol,
-            exchange=exchange,
-            asset=asset,
-            require_venue=False,
-            require_symbol=False,
-        )
         return self._filter_local_snapshots(
             self.layout.list_local_snapshots(),
             venue=venue,
@@ -1127,19 +1013,11 @@ class PolarisClient:
     def _iter_local_events(
         self,
         *,
-        venue: str | None = None,
-        symbol: str | None = None,
-        exchange: str | None = None,
-        asset: str | None = None,
+        venue: str,
+        symbol: str,
         from_: TimeInput | None = None,
         to: TimeInput | None = None,
     ) -> Iterator[JSONDict]:
-        venue, symbol = self._resolve_dataset_identifiers(
-            venue=venue,
-            symbol=symbol,
-            exchange=exchange,
-            asset=asset,
-        )
         start = to_datetime(from_) if from_ is not None else None
         end = to_datetime(to) if to is not None else None
         if start is not None and end is not None and start >= end:
@@ -1172,10 +1050,8 @@ class PolarisClient:
     def replay(
         self,
         *,
-        venue: str | None = None,
-        symbol: str | None = None,
-        exchange: str | None = None,
-        asset: str | None = None,
+        venue: str,
+        symbol: str,
         from_: TimeInput,
         to: TimeInput,
         standard: bool = True,
@@ -1183,12 +1059,6 @@ class PolarisClient:
         timeout: float | None = None,
         parallel: bool | int = False,
     ) -> Iterator[JSONDict]:
-        venue, symbol = self._resolve_dataset_identifiers(
-            venue=venue,
-            symbol=symbol,
-            exchange=exchange,
-            asset=asset,
-        )
         # Keep chunk_size validation for compatibility with prior replay signature.
         effective_chunk_size = (
             chunk_size if chunk_size is not None else DEFAULT_NETWORK_CHUNK_SIZE
@@ -1444,20 +1314,12 @@ class PolarisClient:
     def trades(
         self,
         *,
-        venue: str | None = None,
-        symbol: str | None = None,
-        exchange: str | None = None,
-        asset: str | None = None,
+        venue: str,
+        symbol: str,
         from_: TimeInput,
         to: TimeInput,
         limit: int = 1000,
     ) -> list[JSONDict]:
-        venue, symbol = self._resolve_dataset_identifiers(
-            venue=venue,
-            symbol=symbol,
-            exchange=exchange,
-            asset=asset,
-        )
         return list(
             self._iter_trades_data(
                 venue=venue,
@@ -1488,20 +1350,12 @@ class PolarisClient:
     def events(
         self,
         *,
-        venue: str | None = None,
-        symbol: str | None = None,
-        exchange: str | None = None,
-        asset: str | None = None,
+        venue: str,
+        symbol: str,
         from_: TimeInput,
         to: TimeInput,
         limit: int = 1000,
     ) -> list[JSONDict]:
-        venue, symbol = self._resolve_dataset_identifiers(
-            venue=venue,
-            symbol=symbol,
-            exchange=exchange,
-            asset=asset,
-        )
         return list(
             self._iter_events_data(
                 venue=venue,
@@ -1534,20 +1388,12 @@ class PolarisClient:
     def raw(
         self,
         *,
-        venue: str | None = None,
-        symbol: str | None = None,
-        exchange: str | None = None,
-        asset: str | None = None,
+        venue: str,
+        symbol: str,
         from_: TimeInput,
         to: TimeInput,
         limit: int = 1000,
     ) -> list[JSONDict]:
-        venue, symbol = self._resolve_dataset_identifiers(
-            venue=venue,
-            symbol=symbol,
-            exchange=exchange,
-            asset=asset,
-        )
         return list(
             self._iter_raw_data(
                 venue=venue,
@@ -1581,21 +1427,13 @@ class PolarisClient:
     def ohlcv(
         self,
         *,
-        venue: str | None = None,
-        symbol: str | None = None,
-        exchange: str | None = None,
-        asset: str | None = None,
+        venue: str,
+        symbol: str,
         from_: TimeInput,
         to: TimeInput,
         interval: str,
         format: str | None = None,
     ) -> list[JSONDict] | JSONDict:
-        venue, symbol = self._resolve_dataset_identifiers(
-            venue=venue,
-            symbol=symbol,
-            exchange=exchange,
-            asset=asset,
-        )
         if _interval_to_us(interval) is None:
             raise ValueError(
                 "interval must be one of: " + ", ".join(_INTERVAL_US)
