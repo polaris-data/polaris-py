@@ -17,8 +17,8 @@ from polaris_data.errors import (
     UnauthorizedError,
 )
 
-SNAPSHOT_KEY_DAY_1 = "snapshots/standard/binance/BTC-USDT/2024-01-01.jsonl.zst"
-SNAPSHOT_KEY_DAY_2 = "snapshots/standard/binance/BTC-USDT/2024-01-02.jsonl.zst"
+SNAPSHOT_KEY_DAY_1 = "standard-binance-BTC-USDT-2024-01-01"
+SNAPSHOT_KEY_DAY_2 = "standard-binance-BTC-USDT-2024-01-02"
 
 
 def _zstd_ndjson(rows: list[dict]) -> bytes:
@@ -115,7 +115,7 @@ def test_trades_use_snapshot_download_flow_by_default(tmp_path) -> None:
         if request.url.path == "/snapshots":
             return httpx.Response(
                 200,
-                json={"snapshots": [{"key": SNAPSHOT_KEY_DAY_1}]},
+                json={"snapshots": [{"key": SNAPSHOT_KEY_DAY_1, "date": "2024-01-01"}]},
             )
         if request.url.path == "/snapshots/download":
             return httpx.Response(
@@ -202,7 +202,7 @@ def test_trades_require_snapshot_coverage_and_do_not_fall_back_to_events() -> No
 def test_ohlcv_aggregates_from_snapshot_download_flow(tmp_path) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/snapshots":
-            return httpx.Response(200, json={"snapshots": [{"key": SNAPSHOT_KEY_DAY_1}]})
+            return httpx.Response(200, json={"snapshots": [{"key": SNAPSHOT_KEY_DAY_1, "date": "2024-01-01"}]})
         if request.url.path == "/snapshots/download":
             return httpx.Response(
                 302,
@@ -276,7 +276,7 @@ def test_ohlcv_aggregates_from_snapshot_download_flow(tmp_path) -> None:
 def test_ohlcv_tradingview_format_returns_local_json(tmp_path) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/snapshots":
-            return httpx.Response(200, json={"snapshots": [{"key": SNAPSHOT_KEY_DAY_1}]})
+            return httpx.Response(200, json={"snapshots": [{"key": SNAPSHOT_KEY_DAY_1, "date": "2024-01-01"}]})
         if request.url.path == "/snapshots/download":
             return httpx.Response(
                 302,
@@ -372,7 +372,7 @@ def test_list_snapshots_paginates_across_data_and_snapshots_fields() -> None:
             return httpx.Response(
                 200,
                 json={
-                    "data": [{"key": SNAPSHOT_KEY_DAY_1}],
+                    "data": [{"key": SNAPSHOT_KEY_DAY_1, "date": "2024-01-01"}],
                     "next_cursor": "page-2",
                 },
             )
@@ -380,7 +380,7 @@ def test_list_snapshots_paginates_across_data_and_snapshots_fields() -> None:
         return httpx.Response(
             200,
             json={
-                "snapshots": [{"key": SNAPSHOT_KEY_DAY_2}],
+                "snapshots": [{"key": SNAPSHOT_KEY_DAY_2, "date": "2024-01-02"}],
                 "next_cursor": None,
             },
         )
@@ -410,7 +410,7 @@ def test__download_snapshots_saves_files_and_materializes_daily_artifacts(tmp_pa
             assert request.headers.get("authorization") == "Bearer polaris_key_test"
             return httpx.Response(
                 200,
-                json={"snapshots": [{"key": SNAPSHOT_KEY_DAY_1}]},
+                json={"snapshots": [{"key": SNAPSHOT_KEY_DAY_1, "date": "2024-01-01"}]},
             )
         if request.url.path == "/snapshots/download":
             assert request.url.params.get("key") == SNAPSHOT_KEY_DAY_1
@@ -442,12 +442,12 @@ def test__download_snapshots_saves_files_and_materializes_daily_artifacts(tmp_pa
         client.close()
 
 
-def test__list_local_snapshots_filters_by_source_market_and_date(tmp_path) -> None:
+def test__list_local_snapshots_filters_by_date(tmp_path) -> None:
     client = make_client(lambda request: httpx.Response(500), dataset_root=tmp_path)
     try:
         first = client.layout.data_path_for_key(SNAPSHOT_KEY_DAY_1)
         second = client.layout.data_path_for_key(
-            "snapshots/standard/binance/ETH-USDT/2024-01-01.jsonl.zst"
+            "standard-binance-ETH-USDT-2024-01-01"
         )
         first.parent.mkdir(parents=True, exist_ok=True)
         second.parent.mkdir(parents=True, exist_ok=True)
@@ -455,7 +455,6 @@ def test__list_local_snapshots_filters_by_source_market_and_date(tmp_path) -> No
         second.write_bytes(_zstd_ndjson([{"timestamp": 2}]))
 
         assert len(client._list_local_snapshots()) == 2
-        assert len(client._list_local_snapshots(source="binance", market="BTC-USDT")) == 1
         assert len(client._list_local_snapshots(date="2024-01-01")) == 2
     finally:
         client.close()
@@ -606,7 +605,7 @@ def test__iter_local_events_stops_after_to_boundary_on_ordered_day_files(tmp_pat
 def test_events_use_snapshot_download_flow_by_default(tmp_path) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/snapshots":
-            return httpx.Response(200, json={"snapshots": [{"key": SNAPSHOT_KEY_DAY_1}]})
+            return httpx.Response(200, json={"snapshots": [{"key": SNAPSHOT_KEY_DAY_1, "date": "2024-01-01"}]})
         if request.url.path == "/snapshots/download":
             return httpx.Response(
                 302,
@@ -966,7 +965,7 @@ def test_replay_parallel_keeps_legacy_raw_chunking_behavior() -> None:
 def test_access_open_allows_unauthenticated() -> None:
     payload = {
         "access": {"status": "open"},
-        "snapshots": [{"key": SNAPSHOT_KEY_DAY_1}],
+        "snapshots": [{"key": SNAPSHOT_KEY_DAY_1, "date": "2024-01-01"}],
         "has_more": False,
         "next_cursor": None,
     }
@@ -1021,7 +1020,7 @@ def test_access_restricted_blocks_unauthenticated() -> None:
 def test_access_restricted_passes_with_api_key() -> None:
     payload = {
         "access": {"status": "restricted"},
-        "snapshots": [{"key": SNAPSHOT_KEY_DAY_1}],
+        "snapshots": [{"key": SNAPSHOT_KEY_DAY_1, "date": "2024-01-01"}],
         "has_more": False,
         "next_cursor": None,
     }
@@ -1075,7 +1074,7 @@ def test_access_preview_blocks_unauthenticated_past_cutoff() -> None:
 def test_access_preview_allows_unauthenticated_before_cutoff() -> None:
     payload = {
         "access": {"status": "preview", "public_cutoff_date": "2024-01-20"},
-        "snapshots": [{"key": SNAPSHOT_KEY_DAY_1}],
+        "snapshots": [{"key": SNAPSHOT_KEY_DAY_1, "date": "2024-01-01"}],
         "has_more": False,
         "next_cursor": None,
     }
@@ -1101,7 +1100,7 @@ def test_access_preview_allows_unauthenticated_before_cutoff() -> None:
 def test_access_preview_passes_with_api_key_past_cutoff() -> None:
     payload = {
         "access": {"status": "preview", "public_cutoff_date": "2020-01-01"},
-        "snapshots": [{"key": SNAPSHOT_KEY_DAY_1}],
+        "snapshots": [{"key": SNAPSHOT_KEY_DAY_1, "date": "2024-01-01"}],
         "has_more": False,
         "next_cursor": None,
     }
@@ -1126,7 +1125,7 @@ def test_access_preview_passes_with_api_key_past_cutoff() -> None:
 
 def test_access_missing_field_is_tolerated() -> None:
     payload = {
-        "snapshots": [{"key": SNAPSHOT_KEY_DAY_1}],
+        "snapshots": [{"key": SNAPSHOT_KEY_DAY_1, "date": "2024-01-01"}],
         "has_more": False,
         "next_cursor": None,
     }

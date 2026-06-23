@@ -26,6 +26,9 @@ class SnapshotEntry:
     """Remote standardized snapshot metadata."""
 
     key: str
+    source: str | None = None
+    market: str | None = None
+    date: str | None = None
 
 
 @dataclass(frozen=True)
