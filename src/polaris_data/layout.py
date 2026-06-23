@@ -199,7 +199,6 @@ class LocalDatasetLayout:
                 LocalSnapshotEntry(
                     key=relative,
                     path=str(path),
-                    filename=filename,
                     source=source,
                     market=market,
                     date=day.isoformat() if day is not None else None,

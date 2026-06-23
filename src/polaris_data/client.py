@@ -15,6 +15,7 @@ import orjson
 import zstandard as zstd
 
 from .errors import (
+    AccessDeniedError,
     NotFoundError,
     PolarisError,
     RateLimitedError,
@@ -331,6 +332,15 @@ class PolarisClient:
 
         if status == 401:
             raise UnauthorizedError(message=message, status_code=status, body=body_text)
+        if status == 402:
+            raise AccessDeniedError(
+                message=(
+                    f"{message}. This dataset requires an active subscription. "
+                    "See https://docs.polaris.supply/guides/authentication"
+                ),
+                status_code=status,
+                body=body_text,
+            )
         if status == 404:
             raise NotFoundError(message=message, status_code=status, body=body_text)
         if status == 429:
@@ -546,13 +556,7 @@ class PolarisClient:
         if not isinstance(key, str) or not key:
             raise PolarisError("Snapshot entry did not include a key")
 
-        filename = raw.get("filename")
-        if not isinstance(filename, str) or not filename:
-            filename = key.rsplit("/", 1)[-1]
-        if not filename:
-            raise PolarisError("Snapshot entry did not include a filename")
-
-        return SnapshotEntry(key=key, filename=filename)
+        return SnapshotEntry(key=key)
 
     def _iter_local_snapshot_rows(
         self,
@@ -694,7 +698,7 @@ class PolarisClient:
             with self._client.stream(
                 "GET",
                 "snapshots/download",
-                params={"key": snapshot.key, "filename": snapshot.filename},
+                params={"key": snapshot.key},
                 headers=self._auth_headers(
                     auth_required=False,
                     include_auth_if_available=True,
@@ -872,6 +876,7 @@ class PolarisClient:
 
         snapshots: dict[str, SnapshotEntry] = {}
         cursor: str | None = None
+        access_info: dict[str, Any] | None = None
         while True:
             page_params = dict(params)
             if cursor is not None:
@@ -882,6 +887,41 @@ class PolarisClient:
                 params=page_params,
                 include_auth_if_available=True,
             )
+
+            # Capture access policy from first page (present on every page).
+            if access_info is None:
+                access_info = payload.get("access")
+
+            # Proactive check: surface clear errors for unauthenticated users
+            # requesting data that requires authentication.
+            if access_info is not None and self.api_key is None:
+                status = access_info.get("status")
+                if status == "restricted":
+                    raise AccessDeniedError(
+                        message=(
+                            f"Dataset '{source}/{market}' requires authentication. "
+                            "Set POLARIS_API_KEY or pass api_key to PolarisClient. "
+                            "See https://docs.polaris.supply/guides/authentication"
+                        )
+                    )
+                if status == "preview":
+                    cutoff_raw = access_info.get("public_cutoff_date")
+                    if isinstance(cutoff_raw, str) and cutoff_raw:
+                        try:
+                            cutoff_date = date.fromisoformat(cutoff_raw)
+                            requested_end = to_datetime(to).date()
+                            if requested_end > cutoff_date:
+                                raise AccessDeniedError(
+                                    message=(
+                                        f"Dataset '{source}/{market}' data after "
+                                        f"{cutoff_raw} requires authentication. "
+                                        "Set POLARIS_API_KEY or pass api_key to "
+                                        "PolarisClient. "
+                                        "See https://docs.polaris.supply/guides/authentication"
+                                    )
+                                )
+                        except (ValueError, TypeError):
+                            pass  # malformed date — skip check, never block accidentally
 
             raw_entries = []
             data = payload.get("data")

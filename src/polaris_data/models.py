@@ -26,7 +26,6 @@ class SnapshotEntry:
     """Remote standardized snapshot metadata."""
 
     key: str
-    filename: str
 
 
 @dataclass(frozen=True)
@@ -35,7 +34,6 @@ class LocalSnapshotEntry:
 
     key: str
     path: str
-    filename: str
     source: str | None
     market: str | None
     date: str | None

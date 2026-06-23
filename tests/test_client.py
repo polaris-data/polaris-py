@@ -10,6 +10,7 @@ import zstandard as zstd
 
 from polaris_data import PolarisClient
 from polaris_data.errors import (
+    AccessDeniedError,
     PolarisError,
     RateLimitedError,
     StreamDecodeError,
@@ -379,7 +380,7 @@ def test_list_snapshots_paginates_across_data_and_snapshots_fields() -> None:
         return httpx.Response(
             200,
             json={
-                "snapshots": [{"key": SNAPSHOT_KEY_DAY_2, "filename": "2024-01-02.jsonl.zst"}],
+                "snapshots": [{"key": SNAPSHOT_KEY_DAY_2}],
                 "next_cursor": None,
             },
         )
@@ -395,10 +396,6 @@ def test_list_snapshots_paginates_across_data_and_snapshots_fields() -> None:
         assert [snapshot.key for snapshot in snapshots] == [
             SNAPSHOT_KEY_DAY_1,
             SNAPSHOT_KEY_DAY_2,
-        ]
-        assert [snapshot.filename for snapshot in snapshots] == [
-            "2024-01-01.jsonl.zst",
-            "2024-01-02.jsonl.zst",
         ]
     finally:
         client.close()
@@ -957,5 +954,213 @@ def test_replay_parallel_keeps_legacy_raw_chunking_behavior() -> None:
             {"timestamp": 5},
             {"timestamp": 6},
         ]
+    finally:
+        client.close()
+
+
+# ---------------------------------------------------------------------------
+# Access control (proactive checks in list_snapshots)
+# ---------------------------------------------------------------------------
+
+
+def test_access_open_allows_unauthenticated() -> None:
+    payload = {
+        "access": {"status": "open"},
+        "snapshots": [{"key": SNAPSHOT_KEY_DAY_1}],
+        "has_more": False,
+        "next_cursor": None,
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/snapshots":
+            return httpx.Response(200, json=payload)
+        return httpx.Response(404)
+
+    client = make_client(handler, api_key=None)
+    try:
+        result = client.list_snapshots(
+            source="binance",
+            market="BTC-USDT",
+            from_="2024-01-01T00:00:00Z",
+            to="2024-01-02T00:00:00Z",
+        )
+        assert len(result) == 1
+        assert result[0].key == SNAPSHOT_KEY_DAY_1
+    finally:
+        client.close()
+
+
+def test_access_restricted_blocks_unauthenticated() -> None:
+    payload = {
+        "access": {"status": "restricted"},
+        "snapshots": [],
+        "has_more": False,
+        "next_cursor": None,
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/snapshots":
+            return httpx.Response(200, json=payload)
+        return httpx.Response(404)
+
+    client = make_client(handler, api_key=None)
+    try:
+        with pytest.raises(AccessDeniedError) as exc_info:
+            client.list_snapshots(
+                source="binance",
+                market="BTC-USDT",
+                from_="2024-01-01T00:00:00Z",
+                to="2024-01-02T00:00:00Z",
+            )
+        assert "requires authentication" in str(exc_info.value)
+        assert "docs.polaris.supply/guides/authentication" in str(exc_info.value)
+    finally:
+        client.close()
+
+
+def test_access_restricted_passes_with_api_key() -> None:
+    payload = {
+        "access": {"status": "restricted"},
+        "snapshots": [{"key": SNAPSHOT_KEY_DAY_1}],
+        "has_more": False,
+        "next_cursor": None,
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/snapshots":
+            return httpx.Response(200, json=payload)
+        return httpx.Response(404)
+
+    client = make_client(handler, api_key="polaris_key_test")
+    try:
+        result = client.list_snapshots(
+            source="binance",
+            market="BTC-USDT",
+            from_="2024-01-01T00:00:00Z",
+            to="2024-01-02T00:00:00Z",
+        )
+        assert len(result) == 1
+    finally:
+        client.close()
+
+
+def test_access_preview_blocks_unauthenticated_past_cutoff() -> None:
+    payload = {
+        "access": {"status": "preview", "public_cutoff_date": "2024-01-15"},
+        "snapshots": [],
+        "has_more": False,
+        "next_cursor": None,
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/snapshots":
+            return httpx.Response(200, json=payload)
+        return httpx.Response(404)
+
+    client = make_client(handler, api_key=None)
+    try:
+        with pytest.raises(AccessDeniedError) as exc_info:
+            client.list_snapshots(
+                source="binance",
+                market="BTC-USDT",
+                from_="2024-01-01T00:00:00Z",
+                to="2024-01-20T00:00:00Z",
+            )
+        assert "2024-01-15" in str(exc_info.value)
+        assert "docs.polaris.supply/guides/authentication" in str(exc_info.value)
+    finally:
+        client.close()
+
+
+def test_access_preview_allows_unauthenticated_before_cutoff() -> None:
+    payload = {
+        "access": {"status": "preview", "public_cutoff_date": "2024-01-20"},
+        "snapshots": [{"key": SNAPSHOT_KEY_DAY_1}],
+        "has_more": False,
+        "next_cursor": None,
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/snapshots":
+            return httpx.Response(200, json=payload)
+        return httpx.Response(404)
+
+    client = make_client(handler, api_key=None)
+    try:
+        result = client.list_snapshots(
+            source="binance",
+            market="BTC-USDT",
+            from_="2024-01-01T00:00:00Z",
+            to="2024-01-15T00:00:00Z",
+        )
+        assert len(result) == 1
+    finally:
+        client.close()
+
+
+def test_access_preview_passes_with_api_key_past_cutoff() -> None:
+    payload = {
+        "access": {"status": "preview", "public_cutoff_date": "2020-01-01"},
+        "snapshots": [{"key": SNAPSHOT_KEY_DAY_1}],
+        "has_more": False,
+        "next_cursor": None,
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/snapshots":
+            return httpx.Response(200, json=payload)
+        return httpx.Response(404)
+
+    client = make_client(handler, api_key="polaris_key_test")
+    try:
+        result = client.list_snapshots(
+            source="binance",
+            market="BTC-USDT",
+            from_="2024-01-01T00:00:00Z",
+            to="2024-01-10T00:00:00Z",
+        )
+        assert len(result) == 1
+    finally:
+        client.close()
+
+
+def test_access_missing_field_is_tolerated() -> None:
+    payload = {
+        "snapshots": [{"key": SNAPSHOT_KEY_DAY_1}],
+        "has_more": False,
+        "next_cursor": None,
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/snapshots":
+            return httpx.Response(200, json=payload)
+        return httpx.Response(404)
+
+    client = make_client(handler, api_key=None)
+    try:
+        result = client.list_snapshots(
+            source="binance",
+            market="BTC-USDT",
+            from_="2024-01-01T00:00:00Z",
+            to="2024-01-02T00:00:00Z",
+        )
+        assert len(result) == 1
+    finally:
+        client.close()
+
+
+def test_402_maps_to_access_denied_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            402,
+            json={"error": "payment required"},
+        )
+
+    client = make_client(handler)
+    try:
+        with pytest.raises(AccessDeniedError) as exc_info:
+            client.catalog()
+        assert exc_info.value.status_code == 402
+        assert "docs.polaris.supply/guides/authentication" in str(exc_info.value)
     finally:
         client.close()
