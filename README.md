@@ -62,7 +62,6 @@ Use it to inspect available data and query historical market data.
 
 - `health()`: Check API availability.
 - `catalog(source=None, market=None)`: Browse supported sources and markets.
-- `list_snapshots(source=..., market=..., from_=..., to=..., limit=1000)`: List available standardized snapshot files for a time range.
 
 ### Access patterns
 
